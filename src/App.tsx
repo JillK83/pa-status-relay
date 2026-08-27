@@ -2152,30 +2152,57 @@ export default function App() {
     messageCustom: boolean,
   ): Promise<boolean> {
     setTransitionError(null);
-    if (!selectedCaseId) return false;
+    if (!selectedCaseId || !supabase) return false;
+    const fromStatus = cases.find((c) => c.id === selectedCaseId)?.status ?? null;
+    const now = new Date().toISOString();
+    const { data: authData } = await supabase.auth.getUser();
+    const actorId = authData?.user?.id ?? 'd03a754e-ee55-4064-868c-75483cbab1fb';
     try {
-      const res = await fetch(`/api/cases/${selectedCaseId}/transition`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to_status: toStatus, ...meta, message_sent: messageSent, message_text: messageText, message_custom: messageCustom }),
-      });
-      if (res.status === 401 || res.status === 403) {
-        setTransitionError("Session expired — please sign in again.");
+      const { data: caseData, error: caseError } = await supabase
+        .from('cases')
+        .update({
+          current_status: toStatus,
+          doc_link: meta.doc_link,
+          appointment_link: meta.appointment_link,
+          next_step_note: meta.next_step_note,
+          updated_at: now,
+        })
+        .eq('id', selectedCaseId)
+        .select('id, current_status, updated_at')
+        .single();
+      if (caseError) {
+        console.error('transition failed:', caseError);
+        setTransitionError(caseError.message ?? "Status update failed. Check your connection and try again.");
         return false;
       }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        console.error("transition failed:", err.error, err.message);
-        setTransitionError(err.message ?? "Status update failed. Check your connection and try again.");
+      const { error: auditError } = await supabase
+        .from('audit_trail')
+        .insert({
+          case_id: selectedCaseId,
+          action: 'status_transition',
+          from_status: fromStatus,
+          to_status: toStatus,
+          actor_id: actorId,
+          actor_label: 'Jordan Lee',
+          timestamp: now,
+          reason_code: meta.reason_code,
+          doc_link: meta.doc_link,
+          message_sent: messageSent,
+          message_text: messageText,
+          message_custom: messageCustom,
+        });
+      if (auditError) {
+        console.error('audit insert failed:', auditError);
+        setTransitionError("Status updated but audit log failed. Reload and verify.");
         return false;
       }
-      const data = await res.json();
-      setCases((prev) => prev.map((c) => c.id === selectedCaseId ? { ...c, status: data.case.status } : c));
-      setSuccessToast(`Status updated to ${BADGE_CONFIG[data.case.status as PAStatus]?.label ?? data.case.status}.`);
+      const newStatus = caseData.current_status as PaStatus;
+      setCases((prev) => prev.map((c) => c.id === selectedCaseId ? { ...c, status: newStatus } : c));
+      setSuccessToast(`Status updated to ${BADGE_CONFIG[newStatus as PAStatus]?.label ?? newStatus}.`);
       if (auditOpen && auditCaseId === selectedCaseId) setAuditRefreshToken((t) => t + 1);
       return true;
     } catch (err) {
-      console.error("transition error:", err);
+      console.error('transition error:', err);
       setTransitionError("Connection error — changes weren't saved. Try again.");
       return false;
     }
@@ -2193,19 +2220,35 @@ export default function App() {
   async function handleCreateCaseSubmit(patientName: string, consentFlag: boolean, payerName?: string) {
     setIsCreatingCase(true);
     setCreateCaseError(null);
+    if (!supabase) {
+      setCreateCaseError("Connection error — case wasn't created. Try again.");
+      setIsCreatingCase(false);
+      return;
+    }
     try {
-      const res = await fetch("/api/cases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient_name: patientName, consent_flag: consentFlag, payer_name: payerName || null }),
-      });
-      if (res.status === 401 || res.status === 403) {
-        setCreateCaseError("Session expired — please sign in again.");
-        return;
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setCreateCaseError(err.message ?? "Failed to create case. Please try again.");
+      const now = new Date().toISOString();
+      const { data: authData } = await supabase.auth.getUser();
+      const createdBy = authData?.user?.id ?? null;
+      const { error } = await supabase
+        .from('cases')
+        .insert({
+          id: crypto.randomUUID(),
+          patient_name: patientName,
+          drug: null,
+          payer_name: payerName || null,
+          current_status: 'new_order',
+          consent_flag: consentFlag,
+          doc_link: null,
+          appointment_link: null,
+          next_step_note: null,
+          baseline_snapshot: null,
+          created_at: now,
+          updated_at: now,
+          created_by: createdBy,
+        });
+      if (error) {
+        console.error('create case error:', error);
+        setCreateCaseError(error.message ?? "Failed to create case. Please try again.");
         return;
       }
       setShowCreateCase(false);
