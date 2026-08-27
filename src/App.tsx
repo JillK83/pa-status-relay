@@ -618,8 +618,6 @@ function StatusDrawer({
   isDrawerOpen,
   consentFlag,
   onDemoReset,
-  onDemoClone,
-  onDemoReopen,
   onOpenAudit,
   resetConfirmPending,
   onCancelReset,
@@ -637,8 +635,6 @@ function StatusDrawer({
   isDrawerOpen: boolean;
   consentFlag: boolean;
   onDemoReset: () => Promise<void>;
-  onDemoClone: () => Promise<void>;
-  onDemoReopen: () => Promise<void>;
   onOpenAudit: () => void;
   resetConfirmPending: boolean;
   onCancelReset: () => void;
@@ -2967,8 +2963,6 @@ export default function App() {
             isDrawerOpen={drawerOpen}
             consentFlag={selectedCase?.consent_flag ?? false}
             onDemoReset={handleDemoReset}
-            onDemoClone={handleDemoClone}
-            onDemoReopen={handleDemoReopen}
             onOpenAudit={() => { setAuditCaseId(selectedCaseId); setAuditOpen(true); }}
             resetConfirmPending={resetConfirmPending}
             onCancelReset={() => setResetConfirmPending(false)}
