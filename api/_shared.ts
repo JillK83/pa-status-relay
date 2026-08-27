@@ -57,7 +57,7 @@ export function createBackendContext(request: VercelRequest): BackendRequestCont
     repository: createSupabaseBackendRepository(),
     actor: {
       actor_id: actorId,
-      actor_label: "Demo Coordinator",
+      actor_label: "Jordan Lee",
     },
     now: () => new Date().toISOString(),
     generateCaseId: () => randomUUID(),

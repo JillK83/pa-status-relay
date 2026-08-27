@@ -24,6 +24,7 @@ type CaseListItem = {
   id: string;
   patient_name: string;
   drug: string | null;
+  payer_name: string | null;
   status: PaStatus;
   consent_flag: boolean;
   updated_at: string;
@@ -613,6 +614,7 @@ function StatusDrawer({
   patientName,
   caseNumber,
   drug,
+  payer,
   isDrawerOpen,
   consentFlag,
   onDemoReset,
@@ -629,6 +631,7 @@ function StatusDrawer({
   patientName: string;
   caseNumber: string;
   drug: string | null;
+  payer: string | null;
   isDrawerOpen: boolean;
   consentFlag: boolean;
   onDemoReset: () => Promise<void>;
@@ -669,7 +672,7 @@ function StatusDrawer({
     <div
       className="flex flex-col h-full"
       style={{
-        width: "600px",
+        width: "624px",
         backgroundColor: "#FFFFFF",
         fontFamily: "Inter, sans-serif",
         borderRadius: "12px 0 0 12px",
@@ -750,6 +753,14 @@ function StatusDrawer({
               </span>
               <span style={{ fontSize: "13px", fontWeight: 400, color: "#64748B", lineHeight: 1.4, fontFamily: "Inter, sans-serif" }}>
                 {drug ?? "—"}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span style={{ fontSize: "12px", fontWeight: 500, color: "#64748B", lineHeight: 1.4 }}>
+                Payer
+              </span>
+              <span style={{ fontSize: "13px", fontWeight: 400, color: "#64748B", lineHeight: 1.4, fontFamily: "Inter, sans-serif" }}>
+                {payer ?? "—"}
               </span>
             </div>
           </div>
@@ -1520,7 +1531,7 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
     <div
       className="flex flex-col h-full overflow-hidden"
       style={{
-        width: 600,
+        width: 624,
         backgroundColor: "#FFFFFF",
         boxShadow: "-4px 0 24px rgba(15,23,42,0.12)",
         borderTopLeftRadius: "12px",
@@ -1809,12 +1820,13 @@ function CreateCaseModal({
   submitError,
   isSubmitting,
 }: {
-  onSubmit: (patientName: string, consentFlag: boolean) => void;
+  onSubmit: (patientName: string, consentFlag: boolean, payerName?: string) => void;
   onClose: () => void;
   submitError: string | null;
   isSubmitting: boolean;
 }) {
   const [patientName, setPatientName] = useState("");
+  const [payerName, setPayerName] = useState("");
   const [consentFlag, setConsentFlag] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
 
@@ -1920,6 +1932,45 @@ function CreateCaseModal({
           )}
         </div>
 
+        {/* Payer */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <label
+            htmlFor="create-payer-name"
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: DS.textPrimary,
+              lineHeight: "1.4",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            Payer
+          </label>
+          <input
+            id="create-payer-name"
+            type="text"
+            value={payerName}
+            onChange={(e) => setPayerName(e.target.value)}
+            placeholder="Insurance payer"
+            style={{
+              width: "100%",
+              backgroundColor: "#FFFFFF",
+              border: `1px solid ${DS.borderInput}`,
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 14,
+              fontWeight: 400,
+              lineHeight: "1.43",
+              color: DS.textPrimary,
+              fontFamily: "Inter, sans-serif",
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+            onFocus={(e) => { if (e.target.matches(":focus-visible")) e.currentTarget.style.boxShadow = "0 0 0 2px #2563EB"; }}
+            onBlur={(e) => { e.currentTarget.style.boxShadow = "none"; }}
+          />
+        </div>
+
         {/* Consent toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <input
@@ -1976,7 +2027,7 @@ function CreateCaseModal({
         <SecondaryButton onClick={onClose}>Cancel</SecondaryButton>
         <PrimaryButton
           disabled={nameEmpty || isSubmitting}
-          onClick={() => onSubmit(patientName.trim(), consentFlag)}
+          onClick={() => onSubmit(patientName.trim(), consentFlag, payerName.trim() || undefined)}
         >
           {isSubmitting ? "Creating…" : "Create case"}
         </PrimaryButton>
@@ -2022,14 +2073,14 @@ export default function App() {
     }
     const { data, error } = await supabase
       .from('cases')
-      .select('id, patient_name, drug, current_status, consent_flag, updated_at')
+      .select('id, patient_name, drug, payer_name, current_status, consent_flag, updated_at')
       .order('updated_at', { ascending: false });
     if (error) {
       console.error('fetch cases error:', error.message);
       return;
     }
-    if (data) setCases(data.map(({ id, patient_name, drug, current_status, consent_flag, updated_at }) => ({
-      id, patient_name, drug: drug ?? null, status: current_status as PaStatus, consent_flag, updated_at,
+    if (data) setCases(data.map(({ id, patient_name, drug, payer_name, current_status, consent_flag, updated_at }) => ({
+      id, patient_name, drug: drug ?? null, payer_name: payer_name ?? null, status: current_status as PaStatus, consent_flag, updated_at,
     })));
   }
 
@@ -2139,14 +2190,14 @@ export default function App() {
     setShowCreateCase(true);
   }
 
-  async function handleCreateCaseSubmit(patientName: string, consentFlag: boolean) {
+  async function handleCreateCaseSubmit(patientName: string, consentFlag: boolean, payerName?: string) {
     setIsCreatingCase(true);
     setCreateCaseError(null);
     try {
       const res = await fetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient_name: patientName, consent_flag: consentFlag }),
+        body: JSON.stringify({ patient_name: patientName, consent_flag: consentFlag, payer_name: payerName || null }),
       });
       if (res.status === 401 || res.status === 403) {
         setCreateCaseError("Session expired — please sign in again.");
@@ -2328,12 +2379,30 @@ export default function App() {
             borderTop: "1px solid #E2E8F0",
             padding: 16,
             display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            gap: 2,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          <User size={16} aria-hidden="true" style={{ color: "#64748B", flexShrink: 0 }} />
+          <div
+            aria-hidden="true"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              backgroundColor: "#1B4F72",
+              color: "#FFFFFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: "Inter, sans-serif",
+              flexShrink: 0,
+            }}
+          >
+            JL
+          </div>
           <span
             style={{
               fontSize: 14,
@@ -2345,7 +2414,7 @@ export default function App() {
               whiteSpace: "nowrap",
             }}
           >
-            Demo Coordinator
+            Jordan Lee
           </span>
           <button
             type="button"
@@ -2488,6 +2557,7 @@ export default function App() {
                 <th
                   className="text-left"
                   style={{
+                    width: 240,
                     padding: "12px 16px",
                     fontSize: 12,
                     fontWeight: 500,
@@ -2496,6 +2566,7 @@ export default function App() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   Patient / Drug
@@ -2503,6 +2574,7 @@ export default function App() {
                 <th
                   className="text-left"
                   style={{
+                    width: 160,
                     padding: "12px 16px",
                     fontSize: 12,
                     fontWeight: 500,
@@ -2511,6 +2583,24 @@ export default function App() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Payer
+                </th>
+                <th
+                  className="text-left"
+                  style={{
+                    width: 180,
+                    padding: "12px 16px",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    lineHeight: 1.4,
+                    color: "#475569",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    fontFamily: "Inter, sans-serif",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   Status
@@ -2518,6 +2608,7 @@ export default function App() {
                 <th
                   className="text-left"
                   style={{
+                    width: 140,
                     padding: "12px 16px",
                     fontSize: 12,
                     fontWeight: 500,
@@ -2526,6 +2617,7 @@ export default function App() {
                     letterSpacing: "0.06em",
                     textTransform: "uppercase",
                     fontFamily: "Inter, sans-serif",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   Last Updated
@@ -2611,6 +2703,21 @@ export default function App() {
                       </div>
                     </td>
 
+                    {/* Payer */}
+                    <td style={{ padding: "12px 16px" }}>
+                      <span
+                        style={{
+                          fontSize: "13px",
+                          fontWeight: 400,
+                          lineHeight: 1.4,
+                          color: "#475569",
+                          fontFamily: "Inter, sans-serif",
+                        }}
+                      >
+                        {c.payer_name ?? "—"}
+                      </span>
+                    </td>
+
                     {/* Status Badge */}
                     <td style={{ padding: "12px 16px" }}>
                       <StatusBadge key={c.status} status={c.status} className="pa-chip-animate" />
@@ -2664,7 +2771,7 @@ export default function App() {
         <div
           className="absolute top-0 right-0 bottom-0 z-20"
           style={{
-            width: "600px",
+            width: "624px",
             transform: drawerOpen ? "translateX(0)" : "translateX(100%)",
             transition: "transform 200ms ease-out",
           }}
@@ -2682,6 +2789,7 @@ export default function App() {
             patientName={selectedCase?.patient_name ?? ""}
             caseNumber={selectedCase?.id?.replace("case-", "") ?? ""}
             drug={selectedCase?.drug ?? null}
+            payer={selectedCase?.payer_name ?? null}
             isDrawerOpen={drawerOpen}
             consentFlag={selectedCase?.consent_flag ?? false}
             onDemoReset={handleDemoReset}
@@ -2695,7 +2803,7 @@ export default function App() {
         <div
           className="absolute top-0 right-0 bottom-0 z-20"
           style={{
-            width: "600px",
+            width: "624px",
             transform: auditOpen ? "translateX(0)" : "translateX(100%)",
             transition: "transform 200ms ease-out",
           }}
