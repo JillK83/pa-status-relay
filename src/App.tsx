@@ -5,7 +5,7 @@ import {
   Stethoscope, CheckCircle2, XCircle, Lock,
   Search, ChevronRight, Settings, Layers, TriangleAlert,
   X, ChevronDown, Check, MessageSquare, AlertTriangle,
-  Download, ExternalLink, FolderOpen, SearchX, Plus, User,
+  Download, ExternalLink, FolderOpen, SearchX, Plus,
 } from "lucide-react";
 import {
   getValidTransitions,
@@ -953,6 +953,23 @@ function StatusDrawer({
           )}
         </div>
 
+        <button
+          type="button"
+          onClick={onOpenAudit}
+          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold leading-[1.4] transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
+          style={{
+            backgroundColor: "#FFFFFF",
+            color: "#4A5568",
+            borderColor: "#CBD5E1",
+            boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
+            fontFamily: "Inter, sans-serif",
+            alignSelf: "flex-start",
+          }}
+        >
+          <Layers size={13} aria-hidden="true" />
+          Open audit trail
+        </button>
+
         {/* Demo controls */}
         <div style={{ borderTop: "1px solid #E2E8F0", paddingTop: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -982,8 +999,8 @@ function StatusDrawer({
             {(
               [
                 { key: "reset" as const,  label: "Reset to baseline" },
-                { key: "clone" as const,  label: "Clone case"        },
-                { key: "reopen" as const, label: "Re-open"           },
+                // { key: "clone" as const,  label: "Clone case"        },
+                // { key: "reopen" as const, label: "Re-open"           },
               ] as const
             ).map(({ key, label }) => (
               <button
@@ -1037,23 +1054,6 @@ function StatusDrawer({
             </p>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={onOpenAudit}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold leading-[1.4] transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB]"
-          style={{
-            backgroundColor: "#FFFFFF",
-            color: "#4A5568",
-            borderColor: "#CBD5E1",
-            boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
-            fontFamily: "Inter, sans-serif",
-            alignSelf: "flex-start",
-          }}
-        >
-          <Layers size={13} aria-hidden="true" />
-          Open audit trail
-        </button>
       </div>
 
       {transitionError && (
@@ -1435,23 +1435,13 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
     let ignore = false;
     setAuditLoading(true);
     setAuditError(null);
-    supabase
-      .from('audit_trail')
-      .select('*')
-      .eq('case_id', auditCaseId)
-      .order('timestamp', { ascending: false })
-      .then(({ data, error }: { data: Array<{
-        id: string;
-        from_status: PaStatus | null;
-        to_status: PaStatus;
-        actor_label: string;
-        timestamp: string;
-        reason_code: string | null;
-        doc_link: string | null;
-        message_sent: boolean;
-        message_text: string | null;
-        message_custom: boolean;
-      }> | null; error: unknown }) => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('audit_trail')
+          .select('*')
+          .eq('case_id', auditCaseId)
+          .order('timestamp', { ascending: false });
         if (ignore) return;
         if (error) {
           console.error('listAuditEntriesForCase error:', error);
@@ -1459,8 +1449,20 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
           setAuditLoading(false);
           return;
         }
+        const rows = (data ?? []) as Array<{
+          id: string;
+          from_status: PaStatus | null;
+          to_status: PaStatus;
+          actor_label: string;
+          timestamp: string;
+          reason_code: string | null;
+          doc_link: string | null;
+          message_sent: boolean;
+          message_text: string | null;
+          message_custom: boolean;
+        }>;
         setAuditRows(
-          (data ?? []).map((row) => {
+          rows.map((row) => {
             const d = new Date(row.timestamp);
             const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
             const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -1483,14 +1485,14 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
           }),
         );
         setAuditLoading(false);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (!ignore) {
           console.error('listAuditEntriesForCase error:', err);
           setAuditError("Failed to load audit trail. Try closing and reopening the case.");
           setAuditLoading(false);
         }
-      });
+      }
+    })();
     return () => { ignore = true; };
   }, [auditCaseId, refreshToken]);
 
@@ -2179,7 +2181,6 @@ export default function App() {
         .from('audit_trail')
         .insert({
           case_id: selectedCaseId,
-          action: 'status_transition',
           from_status: fromStatus,
           to_status: toStatus,
           actor_id: actorId,
@@ -2192,7 +2193,7 @@ export default function App() {
           message_custom: messageCustom,
         });
       if (auditError) {
-        console.error('audit insert failed:', auditError);
+        console.error('audit insert failed:', JSON.stringify(auditError, null, 2));
         setTransitionError("Status updated but audit log failed. Reload and verify.");
         return false;
       }
@@ -2263,68 +2264,159 @@ export default function App() {
   }
 
   async function handleConsentUpdate(id: string) {
+    if (!supabase) return;
     try {
-      const res = await fetch(`/api/cases/${id}/consent`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consent_flag: true }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        console.error(err.error, err.message);
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('cases')
+        .update({ consent_flag: true, updated_at: now })
+        .eq('id', id);
+      if (error) {
+        console.error('consent update failed:', error);
         return;
       }
-      const data = await res.json();
       setCases((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, consent_flag: data.case.consent_flag as boolean } : c)),
+        prev.map((c) => (c.id === id ? { ...c, consent_flag: true } : c)),
       );
     } catch (err) {
       console.error("consent update failed", err);
     }
   }
 
+  const SEED_BASELINES: Record<string, {
+    current_status: string;
+    consent_flag: boolean;
+    doc_link: null;
+    appointment_link: null;
+    next_step_note: null;
+  }> = {
+    'Maria Santos':   { current_status: 'new_order',           consent_flag: true,  doc_link: null, appointment_link: null, next_step_note: null },
+    'Robert Okafor':  { current_status: 'needs_documentation', consent_flag: true,  doc_link: null, appointment_link: null, next_step_note: null },
+    'Aisha Williams': { current_status: 'pending_review',      consent_flag: false, doc_link: null, appointment_link: null, next_step_note: null },
+    'James Kowalski': { current_status: 'info_request',        consent_flag: true,  doc_link: null, appointment_link: null, next_step_note: null },
+    'Diane Morales':  { current_status: 'peer_to_peer',        consent_flag: true,  doc_link: null, appointment_link: null, next_step_note: null },
+  };
+
   async function handleDemoReset() {
-    if (!selectedCaseId) return;
-    const res = await fetch(`/api/cases/${selectedCaseId}/reset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirm: true }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? "Reset failed.");
+    if (!selectedCaseId || !supabase) return;
+    try {
+      const source = cases.find((c) => c.id === selectedCaseId);
+      const baseline = source
+        ? (SEED_BASELINES[source.patient_name] ?? { current_status: 'new_order', consent_flag: true, doc_link: null, appointment_link: null, next_step_note: null })
+        : { current_status: 'new_order', consent_flag: true, doc_link: null, appointment_link: null, next_step_note: null };
+      const now = new Date().toISOString();
+      const { error: updateError } = await supabase
+        .from('cases')
+        .update({
+          current_status: baseline.current_status,
+          consent_flag: baseline.consent_flag,
+          doc_link: baseline.doc_link,
+          appointment_link: baseline.appointment_link,
+          next_step_note: baseline.next_step_note,
+          updated_at: now,
+        })
+        .eq('id', selectedCaseId);
+      if (updateError) {
+        console.error('reset: case update failed', updateError);
+        setSuccessToast("Reset failed — try again.");
+        return;
+      }
+      const { error: demoError } = await supabase
+        .from('demo_events')
+        .insert({
+          id: crypto.randomUUID(),
+          case_id: selectedCaseId,
+          event_type: 'reset',
+          actor_id: 'b1aacaa5-e558-49d1-9e68-9d76b0de2007',
+          timestamp: now,
+          notes: null,
+        });
+      if (demoError) console.error('reset: demo_events insert failed', demoError);
+      setCases((prev) => prev.map((c) =>
+        c.id === selectedCaseId
+          ? { ...c, status: baseline.current_status as PaStatus, consent_flag: baseline.consent_flag, updated_at: now }
+          : c
+      ));
+      setSuccessToast("Case reset to baseline.");
+    } catch (err) {
+      console.error('reset error:', err);
+      setSuccessToast("Reset failed — try again.");
     }
-    const data = await res.json();
-    setCases((prev) => prev.map((c) =>
-      c.id === selectedCaseId ? { ...c, status: data.case.status, updated_at: data.case.updated_at } : c
-    ));
-    setSuccessToast("Case reset to baseline.");
   }
 
   async function handleDemoClone() {
-    if (!selectedCaseId) return;
-    const res = await fetch(`/api/cases/${selectedCaseId}/clone`, { method: "POST" });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? "Clone failed.");
+    if (!selectedCaseId || !supabase) return;
+    try {
+      const source = cases.find((c) => c.id === selectedCaseId);
+      if (!source) return;
+      const now = new Date().toISOString();
+      const newId = crypto.randomUUID();
+      const { error: insertError } = await supabase
+        .from('cases')
+        .insert({
+          id: newId,
+          patient_name: source.patient_name,
+          drug: source.drug ?? null,
+          payer_name: source.payer_name ?? null,
+          current_status: 'new_order',
+          consent_flag: source.consent_flag,
+          doc_link: null,
+          appointment_link: null,
+          next_step_note: null,
+          baseline_snapshot: null,
+          created_at: now,
+          updated_at: now,
+          created_by: 'b1aacaa5-e558-49d1-9e68-9d76b0de2007',
+        });
+      if (insertError) {
+        console.error('clone: case insert failed', insertError);
+        setSuccessToast("Clone failed — try again.");
+        return;
+      }
+      const { error: demoError } = await supabase
+        .from('demo_events')
+        .insert({
+          id: crypto.randomUUID(),
+          case_id: selectedCaseId,
+          event_type: 'clone',
+          actor_id: 'b1aacaa5-e558-49d1-9e68-9d76b0de2007',
+          timestamp: now,
+          notes: null,
+        });
+      if (demoError) console.error('clone: demo_events insert failed', demoError);
+      await fetchCases();
+      setDrawerOpen(false);
+      setSuccessToast("Case cloned successfully.");
+    } catch (err) {
+      console.error('clone error:', err);
+      setSuccessToast("Clone failed — try again.");
     }
-    await fetchCases();
-    setDrawerOpen(false);
-    setSuccessToast("Case cloned successfully.");
   }
 
   async function handleDemoReopen() {
-    if (!selectedCaseId) return;
-    const res = await fetch(`/api/cases/${selectedCaseId}/reopen`, { method: "POST" });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message ?? "Re-open failed.");
+    if (!selectedCaseId || !supabase) return;
+    try {
+      const now = new Date().toISOString();
+      const { error } = await supabase
+        .from('demo_events')
+        .insert({
+          id: crypto.randomUUID(),
+          case_id: selectedCaseId,
+          event_type: 'reopen',
+          actor_id: 'b1aacaa5-e558-49d1-9e68-9d76b0de2007',
+          timestamp: now,
+          notes: null,
+        });
+      if (error) {
+        console.error('reopen: demo_events insert failed', error);
+        setSuccessToast("Re-open failed — try again.");
+        return;
+      }
+      setSuccessToast("Case re-opened.");
+    } catch (err) {
+      console.error('reopen error:', err);
+      setSuccessToast("Re-open failed — try again.");
     }
-    const data = await res.json();
-    setCases((prev) => prev.map((c) =>
-      c.id === selectedCaseId ? { ...c, status: data.case.status, updated_at: data.case.updated_at } : c
-    ));
-    setSuccessToast("Case re-opened.");
   }
 
   const selectedCase = cases.find((c) => c.id === selectedCaseId) ?? null;

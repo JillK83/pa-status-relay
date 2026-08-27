@@ -95,6 +95,7 @@ export function prepareCloneCase(
   const caseInsert: CaseInsertDraft = {
     patient_name: sourceCase.patient_name,
     drug: sourceCase.drug,
+    payer_name: null,
     current_status: "new_order",
     consent_flag: sourceCase.consent_flag,
     doc_link: null,
