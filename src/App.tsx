@@ -621,6 +621,8 @@ function StatusDrawer({
   onDemoClone,
   onDemoReopen,
   onOpenAudit,
+  resetConfirmPending,
+  onCancelReset,
 }: {
   onClose: () => void;
   onOpenModal: (text: string, toStatus: PaStatus, meta: TransitionMeta) => void;
@@ -638,6 +640,8 @@ function StatusDrawer({
   onDemoClone: () => Promise<void>;
   onDemoReopen: () => Promise<void>;
   onOpenAudit: () => void;
+  resetConfirmPending: boolean;
+  onCancelReset: () => void;
 }) {
   const [selectedTransition, setSelectedTransition] = useState<PaStatus>(
     () => getValidTransitions(currentStatus)[0] ?? "closed",
@@ -996,47 +1000,76 @@ function StatusDrawer({
             Demo controls
           </span>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {(
-              [
-                { key: "reset" as const,  label: "Reset to baseline" },
-                // { key: "clone" as const,  label: "Clone case"        },
-                // { key: "reopen" as const, label: "Re-open"           },
-              ] as const
-            ).map(({ key, label }) => (
+            {resetConfirmPending ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onCancelReset()}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#475569",
+                    backgroundColor: "#F1F5F9",
+                    border: "1px solid #E2E8F0",
+                    borderRadius: 6,
+                    padding: "6px 12px",
+                    cursor: "pointer",
+                    fontFamily: "Inter, sans-serif",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={demoLoading !== null}
+                  onClick={async () => {
+                    setDemoLoading("reset");
+                    setDemoError(null);
+                    try {
+                      await onDemoReset();
+                    } catch (err) {
+                      setDemoError(err instanceof Error ? err.message : "Action failed.");
+                    } finally {
+                      setDemoLoading(null);
+                    }
+                  }}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: demoLoading !== null ? "#94A3B8" : "#FFFFFF",
+                    backgroundColor: demoLoading !== null ? "#F1F5F9" : "#DC2626",
+                    border: "1px solid transparent",
+                    borderRadius: 6,
+                    padding: "6px 12px",
+                    cursor: demoLoading !== null ? "not-allowed" : "pointer",
+                    fontFamily: "Inter, sans-serif",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {demoLoading === "reset" ? "…" : "Confirm reset"}
+                </button>
+              </>
+            ) : (
               <button
-                key={key}
                 type="button"
-                disabled={demoLoading !== null}
-                onClick={async () => {
-                  if (key === "reset" && !window.confirm("Reset this case to its baseline state?")) return;
-                  setDemoLoading(key);
-                  setDemoError(null);
-                  try {
-                    if (key === "reset") await onDemoReset();
-                    else if (key === "clone") await onDemoClone();
-                    else await onDemoReopen();
-                  } catch (err) {
-                    setDemoError(err instanceof Error ? err.message : "Action failed.");
-                  } finally {
-                    setDemoLoading(null);
-                  }
-                }}
+                onClick={() => onDemoReset()}
                 style={{
                   fontSize: 13,
                   fontWeight: 500,
-                  color: demoLoading !== null ? "#94A3B8" : "#475569",
+                  color: "#475569",
                   backgroundColor: "#F1F5F9",
                   border: "1px solid #E2E8F0",
                   borderRadius: 6,
                   padding: "6px 12px",
-                  cursor: demoLoading !== null ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                   fontFamily: "Inter, sans-serif",
                   lineHeight: 1.4,
                 }}
               >
-                {demoLoading === key ? "…" : label}
+                Reset to baseline
               </button>
-            ))}
+            )}
           </div>
           {demoError && (
             <p
@@ -2062,6 +2095,7 @@ export default function App() {
   const [auditCaseId, setAuditCaseId] = useState<string | null>(null);
   const [auditRefreshToken, setAuditRefreshToken] = useState(0);
   const [showCreateCase, setShowCreateCase] = useState(false);
+  const [resetConfirmPending, setResetConfirmPending] = useState(false);
   const [createCaseError, setCreateCaseError] = useState<string | null>(null);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [cases, setCases] = useState<CaseListItem[]>([]);
@@ -2299,6 +2333,11 @@ export default function App() {
 
   async function handleDemoReset() {
     if (!selectedCaseId || !supabase) return;
+    if (!resetConfirmPending) {
+      setResetConfirmPending(true);
+      return;
+    }
+    setResetConfirmPending(false);
     try {
       const source = cases.find((c) => c.id === selectedCaseId);
       const baseline = source
@@ -2915,7 +2954,7 @@ export default function App() {
           aria-label="Log status"
         >
           <StatusDrawer
-            onClose={() => { setDrawerOpen(false); setTransitionError(null); }}
+            onClose={() => { setDrawerOpen(false); setTransitionError(null); setResetConfirmPending(false); }}
             onOpenModal={openModal}
             onLogOnly={handleLogOnly}
             currentStatus={(selectedCase?.status as PaStatus) ?? "new_order"}
@@ -2931,6 +2970,8 @@ export default function App() {
             onDemoClone={handleDemoClone}
             onDemoReopen={handleDemoReopen}
             onOpenAudit={() => { setAuditCaseId(selectedCaseId); setAuditOpen(true); }}
+            resetConfirmPending={resetConfirmPending}
+            onCancelReset={() => setResetConfirmPending(false)}
           />
         </div>
 
