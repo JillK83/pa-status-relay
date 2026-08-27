@@ -1416,29 +1416,39 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
 
   useEffect(() => {
     if (!auditCaseId) { setAuditRows([]); return; }
+    if (!supabase) {
+      setAuditError("Failed to load audit trail. Try closing and reopening the case.");
+      return;
+    }
     let ignore = false;
     setAuditLoading(true);
     setAuditError(null);
-    fetch(`/api/cases/${auditCaseId}/audit`)
-      .then((res) => {
-        if (!res.ok) throw new Error("fetch failed");
-        return res.json();
-      })
-      .then((data) => {
+    supabase
+      .from('audit_trail')
+      .select('*')
+      .eq('case_id', auditCaseId)
+      .order('timestamp', { ascending: false })
+      .then(({ data, error }: { data: Array<{
+        id: string;
+        from_status: PaStatus | null;
+        to_status: PaStatus;
+        actor_label: string;
+        timestamp: string;
+        reason_code: string | null;
+        doc_link: string | null;
+        message_sent: boolean;
+        message_text: string | null;
+        message_custom: boolean;
+      }> | null; error: unknown }) => {
         if (ignore) return;
+        if (error) {
+          console.error('listAuditEntriesForCase error:', error);
+          setAuditError("Failed to load audit trail. Try closing and reopening the case.");
+          setAuditLoading(false);
+          return;
+        }
         setAuditRows(
-          (data.audit ?? []).map((row: {
-            id: string;
-            from_status: PaStatus | null;
-            to_status: PaStatus;
-            actor_label: string;
-            timestamp: string;
-            reason_code: string | null;
-            doc_link: string | null;
-            message_sent: boolean;
-            message_text: string | null;
-            message_custom: boolean;
-          }) => {
+          (data ?? []).map((row) => {
             const d = new Date(row.timestamp);
             const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
             const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -1459,9 +1469,15 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
             };
           }),
         );
+        setAuditLoading(false);
       })
-      .catch(() => { if (!ignore) setAuditError("Failed to load audit trail. Try closing and reopening the case."); })
-      .finally(() => { if (!ignore) setAuditLoading(false); });
+      .catch((err: unknown) => {
+        if (!ignore) {
+          console.error('listAuditEntriesForCase error:', err);
+          setAuditError("Failed to load audit trail. Try closing and reopening the case.");
+          setAuditLoading(false);
+        }
+      });
     return () => { ignore = true; };
   }, [auditCaseId, refreshToken]);
 
