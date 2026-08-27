@@ -1305,6 +1305,7 @@ function MetadataCard({ reasonCode, docLink, messageSent, messageCustom, message
 interface TimelineNode {
   id: string;
   timestamp: string;
+  isoTimestamp: string;
   actor: string;
   type: "transition" | "demo";
   from?: PAStatus;
@@ -1455,6 +1456,7 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
             return {
               id: row.id,
               timestamp: `${date} · ${time}`,
+              isoTimestamp: row.timestamp,
               actor: row.actor_label,
               type: "transition" as const,
               from: row.from_status ?? undefined,
@@ -1493,10 +1495,24 @@ function AuditDrawer({ onClose, selectedCase, refreshToken }: {
     return id.length > 20 ? id.slice(0, 20) + "…" : id;
   })();
 
+  const now = new Date();
   const filteredNodes = auditRows.filter((node) => {
+    // Action type filter
     if (filterActionType === "Status change" && node.type !== "transition") return false;
+    if (filterActionType === "No message sent" && node.metadata?.messageSent !== false) return false;
+    if (filterActionType === "Custom message" && node.metadata?.messageCustom !== true) return false;
+
+    // Actor filter
     if (filterActor !== null && node.actor !== filterActor) return false;
-    // TODO: filter by filterDateRange when date-range picker is wired
+
+    // Date range filter
+    if (filterDateRange !== null) {
+      const rowDate = new Date(node.isoTimestamp);
+      if (filterDateRange === "Last 24h" && (now.getTime() - rowDate.getTime()) > 24 * 60 * 60 * 1000) return false;
+      if (filterDateRange === "Last 7 days" && (now.getTime() - rowDate.getTime()) > 7 * 24 * 60 * 60 * 1000) return false;
+      if (filterDateRange === "Last 30 days" && (now.getTime() - rowDate.getTime()) > 30 * 24 * 60 * 60 * 1000) return false;
+    }
+
     return true;
   });
 
