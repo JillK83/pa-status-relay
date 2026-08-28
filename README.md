@@ -2,7 +2,7 @@
 
 Problem: Oncology coordinators currently rely on manual, disconnected portal checks to track prior authorizations for infused drugs, resulting in operational bottlenecks, repetitive patient status inquiries, and unmitigated financial risk.
 
-PA Status Relay is a five-day workflow prototype for oncology infusion coordinators. It demonstrates manually logged prior-authorization status transitions, required-metadata enforcement, patient-message previews, consent gating, and immutable audit evidence for infused, buy-and-bill drugs.
+PA Status Relay is a prior authorization case management tool for oncology infusion coordinators — built as a five-day sprint to validate the core workflow for infused, buy-and-bill drugs. It demonstrates manually logged prior-authorization status transitions, required-metadata enforcement, patient-message previews, consent gating, and immutable audit evidence.
 
 **Team:** Jillian Krebsbach, Natalie Walker, Chris Wozniak, Lee McDonald  
 **Status:** Pre-implementation MVP demo using synthetic data  
@@ -33,17 +33,6 @@ The prototype does **not** retrieve real-time authorization status. Coordinators
 
 Do not treat a choice as locked merely because it appears in a design or instruction file. `DECISIONS.md` records the team's approved choices.
 
-## Roles
-
-| Role | Responsibility |
-|---|---|
-| Design / Front end | Figma handoff, application shell, coordinator UI, message preview, audit display, accessibility |
-| Backend developer 1 | Schema, authentication, transition API, gates, audit API, RLS, hosting |
-| Backend developer 2 | Case CRUD, message templates, consent logic, Reset/Clone/Re-open |
-| QA / Slides | Test-first regression specifications, AC mapping, Mercator configuration, scenario execution, defects, presentation |
-
-Named assignments should be recorded by the team. Repository documentation should not silently assign work an individual has not accepted.
-
 ## Authoritative contracts
 
 - `PA_Status_Relay_PRD.md` defines product scope and acceptance criteria.
@@ -71,18 +60,7 @@ A Mercator pass means traceability exists. It does **not** mean application test
 
 ## Mercator
 
-Mercator is a deterministic acceptance-criteria traceability checker. It reads the PRD, checks mappings to real test specifications or `@covers:` declarations in test code, reports drift, and can flag missing P0 evidence in CI. It does not call an LLM, change application code, or execute the tests.
-
-Local command after repository paths are confirmed:
-
-```bash
-pip install pyyaml
-python mercator/mercator.py \
-  --prd docs/PA_Status_Relay_PRD.md \
-  --test-dir src \
-  --manifest mercator/test_manifest.yaml \
-  --repo-root .
-```
+Test traceability is managed via Mercator — see docs/MERCATOR_SETUP.md.
 
 ## Local application setup
 
