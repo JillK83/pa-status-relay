@@ -1,3 +1,13 @@
+## Try the demo
+
+**Live app:**
+
+Sign in with the demo account:https://pa-status-relay-psi.vercel.app/
+- **Email:** staff@pastatusrelay.demo
+- **Password:** DemoPA26!
+
+This account uses sample data only. No real patient information is stored.
+
 # PA Status Relay
 
 Problem: Oncology coordinators currently rely on manual, disconnected portal checks to track prior authorizations for infused drugs, resulting in operational bottlenecks, repetitive patient status inquiries, and unmitigated financial risk.
